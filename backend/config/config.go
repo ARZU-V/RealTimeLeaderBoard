@@ -8,11 +8,11 @@ import (
 )
 
 type Config struct {
-	DatabaseURL      string
-	RedisEndpoint    string
-	RedisPassword    string
-	Port             string
-	SeedCount        int
+	DatabaseURL   string
+	RedisEndpoint string
+	RedisPassword string
+	Port          string
+	SeedCount     int
 }
 
 func Load() *Config {
@@ -21,7 +21,7 @@ func Load() *Config {
 	config := &Config{
 		DatabaseURL:   os.Getenv("DATABASE_URL"),
 		RedisEndpoint: os.Getenv("UPSTASH_REDIS_ENDPOINT"),
-		RedisPassword: os.Getenv("UPSTASH_REDIS_PASSWORD"),
+		RedisPassword: os.Getenv("UPSTASH_REDIS_REST_TOKEN"),
 		Port:          getEnvOrDefault("PORT", "8080"),
 		SeedCount:     10000,
 	}
