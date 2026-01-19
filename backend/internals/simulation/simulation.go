@@ -45,7 +45,7 @@ func Start(db *sql.DB, service *services.LeaderboardService) {
 
 	go func() {
 		// Slower ticker: Update every 500ms (Safe for localhost)
-		ticker := time.NewTicker(500 * time.Millisecond)
+		ticker := time.NewTicker(200 * time.Millisecond)
 		defer ticker.Stop()
 
 		cycle := 0
@@ -66,18 +66,14 @@ func Start(db *sql.DB, service *services.LeaderboardService) {
 	}()
 }
 
-// performBatchUpdate updates 'batchSize' random users within the given rank range (offset/limit)
-// We use LIMIT/OFFSET in SQL to approximate the tiers.
 func performBatchUpdate(db *sql.DB, service *services.LeaderboardService, volatility int, minRank, maxRank int) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	limit := maxRank - minRank + 1
 	offset := minRank - 1
-	batchSize := 10 // How many users to update at once
+	batchSize := 10
 
-	// 1. Select a BATCH of random users from this specific tier
-	// We get the top X users, then randomize order, then pick the batch size.
 	query := fmt.Sprintf(`
 		SELECT username, rating 
 		FROM (

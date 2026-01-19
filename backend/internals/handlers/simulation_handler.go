@@ -3,7 +3,6 @@ package handlers
 import (
 	"matiks-leaderboard/internals/simulation"
 	"net/http"
-
 	"github.com/gin-gonic/gin"
 )
 

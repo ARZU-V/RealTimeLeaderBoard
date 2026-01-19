@@ -27,11 +27,11 @@ const SearchScreen = () => {
 
   //  SEARCH API CALL 
   const fetchSearchResults = async (text, pageNum, shouldAppend = false) => {
-    // Prevent searching for empty strings
+  
     if (text.length < 1) return;
     
     try {
-      // Only show big spinner on initial search, not on "load more"
+     
       if (!shouldAppend) setLoading(true);
 
       console.log(`Searching for "${text}" - Page ${pageNum}`);
@@ -58,14 +58,14 @@ const SearchScreen = () => {
     }
   };
 
-  //  HANDLE TEXT INPUT (Debouncing)
+  //  (Debouncing)
   const handleTextChange = (text) => {
     setQuery(text);
     queryRef.current = text;
     setPage(1); 
     setHasMore(true);
 
-    // Clear previous timer to prevent spamming API
+    
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
     if (text.length < 1) {
@@ -73,13 +73,13 @@ const SearchScreen = () => {
       return;
     }
 
-    // Wait 300ms after user stops typing before calling API
+    // Wait 300ms before calling API
     typingTimeoutRef.current = setTimeout(() => {
       fetchSearchResults(text, 1, false);
     }, 300);
   };
 
-  // --- 3. HANDLE INFINITE SCROLL ---
+  // Infinite Scroll Handler
   const handleLoadMore = () => {
     // Don't load if already loading or no more data
     if (!hasMore || loading) return;
@@ -96,7 +96,6 @@ const SearchScreen = () => {
       rank={item.global_rank}
       username={item.username}
       rating={item.rating}
-      // Highlight exact match
       isHighlighted={item.username.toLowerCase() === query.toLowerCase()}
     />
   );
