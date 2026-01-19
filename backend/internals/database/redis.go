@@ -13,16 +13,16 @@ type RedisDB struct {
 
 func NewRedisDB(connectionString string) (*RedisDB, error) {
 
-	// 1. Use ParseURL to automatically handle "rediss://", password, and TLS
+	
 	opts, err := redis.ParseURL(connectionString)
 	if err != nil {
 		return nil, fmt.Errorf("invalid redis url: %w", err)
 	}
 
-	// 2. Create the client
+	// Create client
 	client := redis.NewClient(opts)
 
-	// 3. Test the connection
+	// Connection Test
 	if err := client.Ping(context.Background()).Err(); err != nil {
 		return nil, fmt.Errorf("failed to connect to redis: %w", err)
 	}
