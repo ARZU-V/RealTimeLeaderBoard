@@ -6,6 +6,8 @@ import (
 	"matiks-leaderboard/internals/database"
 	"matiks-leaderboard/internals/handlers"
 	"matiks-leaderboard/internals/services"
+	"matiks-leaderboard/internals/simulation"
+	"os"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -40,7 +42,9 @@ func main() {
 	if cfg.Port == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
-
+	if os.Getenv("ENABLE_SIMULATION") == "true" {
+		simulation.Start(pg.DB, leaderboardService)
+	}
 	r := gin.Default()
 
 	// CORS middleware

@@ -4,8 +4,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"matiks-leaderboard/internals/services"
+
+	"github.com/gin-gonic/gin"
 )
 
 type LeaderboardHandler struct {
@@ -57,7 +58,7 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 // @Router /api/search [get]
 func (h *LeaderboardHandler) SearchUsers(c *gin.Context) {
 	username := c.Query("username")
-	
+
 	if username == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "username query parameter required"})
 		return
