@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build": "npx expo export -p web"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -14,6 +15,7 @@
     "@react-navigation/native": "^7.1.28",
     "axios": "^1.13.2",
     "babel-preset-expo": "~54.0.9",
+    "dotenv": "^17.2.3",
     "expo": "~54.0.31",
     "expo-status-bar": "~3.0.9",
     "react": "19.1.0",

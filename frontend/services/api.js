@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_URL = 'http://192.168.1.28:8080/api';//Adjust for hosted URL
+const API_URL = 'https://realtimeleaderboard-production.up.railway.app/api';
+
+
 const api = axios.create({
   baseURL: API_URL,
   timeout: 10000,
@@ -21,10 +23,14 @@ export const getLeaderboard = async (page = 1, limit = 50) => {
   }
 };
 
-export const searchUsers = async (username) => {
+// UPDATED: Now accepts 'page' for infinite scrolling
+export const searchUsers = async (username, page = 1) => {
   try {
     const response = await api.get('/search', {
-      params: { username },
+      params: { 
+        username,
+        page // Pass the page number to backend
+      },
     });
     return response.data;
   } catch (error) {
@@ -52,14 +58,25 @@ export const updateRating = async (username, rating) => {
     throw error;
   }
 };
+
 export const toggleSimulation = async (isActive) => {
-  const response = await axios.post(`${API_URL}/simulation/toggle`, {
-    active: isActive
-  });
-  return response.data;
+  try {
+    const response = await api.post('/simulation/toggle', {
+      active: isActive
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error toggling simulation:', error);
+    throw error;
+  }
 };
 
 export const getSimulationStatus = async () => {
-  const response = await axios.get(`${API_URL}/simulation/status`);
-  return response.data;
+  try {
+    const response = await api.get('/simulation/status');
+    return response.data;
+  } catch (error) {
+    console.error('Error getting simulation status:', error);
+    throw error;
+  }
 };

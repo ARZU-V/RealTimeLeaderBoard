@@ -8,13 +8,9 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from 'react-native';
-import axios from 'axios'; 
 
-// ADJUST THIS URL if testing on real device (e.g. use your IP 'http://192.168.1.5:8080/api')
-const API_URL = 'http://localhost:8080/api'; 
-
+import { searchUsers } from '../services/api';
 import LeaderboardItem from '../components/LeaderboardItem';
-
 
 const SearchScreen = () => {
   const [query, setQuery] = useState('');
@@ -29,7 +25,7 @@ const SearchScreen = () => {
   const queryRef = useRef('');
   const typingTimeoutRef = useRef(null);
 
-  // --- 1. SEARCH API CALL ---
+  //  SEARCH API CALL 
   const fetchSearchResults = async (text, pageNum, shouldAppend = false) => {
     // Prevent searching for empty strings
     if (text.length < 1) return;
@@ -40,8 +36,9 @@ const SearchScreen = () => {
 
       console.log(`Searching for "${text}" - Page ${pageNum}`);
 
-      const response = await axios.get(`${API_URL}/search?username=${text}&page=${pageNum}`);
-      const newResults = response.data.results || [];
+      // USE THE API FUNCTION
+      const response = await searchUsers(text, pageNum);
+      const newResults = response.results || [];
 
       if (shouldAppend) {
         // APPEND new users to the existing list (Infinite Scroll)
@@ -61,11 +58,11 @@ const SearchScreen = () => {
     }
   };
 
-  // --- 2. HANDLE TEXT INPUT (DEBOUNCED) ---
+  //  HANDLE TEXT INPUT (Debouncing)
   const handleTextChange = (text) => {
     setQuery(text);
     queryRef.current = text;
-    setPage(1); // Reset to Page 1 for new search
+    setPage(1); 
     setHasMore(true);
 
     // Clear previous timer to prevent spamming API
