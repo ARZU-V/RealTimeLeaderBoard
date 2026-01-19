@@ -10,7 +10,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/cors" // Ensure this is in go.mod
 	"github.com/gin-gonic/gin"
 )
 
@@ -18,7 +18,6 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
-	
 	// Connect to databases
 	pg, err := database.NewPostgresDB(cfg.DatabaseURL)
 	if err != nil {
@@ -37,34 +36,31 @@ func main() {
 
 	// Initialize handlers
 	leaderboardHandler := handlers.NewLeaderboardHandler(leaderboardService)
-	simHandler := handlers.NewSimulationHandler() // <--- 1. NEW: Init Sim Handler
+	simHandler := handlers.NewSimulationHandler()
 
-	// Setup Gin
-	if cfg.Port == "production" {
+	// Setup Gin Mode
+	if os.Getenv("APP_ENV") == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// 2. START BACKGROUND WORKER (Always run this so the toggle button works!)
+	// START BACKGROUND WORKER
 	simulation.Start(pg.DB, leaderboardService)
 
-	// Optional: Auto-start if ENV is set
+	// Auto-start simulation if ENV is set
 	if os.Getenv("ENABLE_SIMULATION") == "true" {
 		simulation.SetState(true)
 	}
 
 	r := gin.Default()
+	
+	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowAllOrigins = true 
+	corsConfig.AllowMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
+	corsConfig.AllowHeaders = []string{"Origin", "Content-Length", "Content-Type", "Accept", "Authorization"}
+	corsConfig.MaxAge = 12 * time.Hour
 
-	// CORS middleware
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
-
-	// Health check
+	r.Use(cors.New(corsConfig))
+	
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":    "healthy",
@@ -80,7 +76,7 @@ func main() {
 		api.GET("/users/:username/rank", leaderboardHandler.GetUserRank)
 		api.POST("/users/:username/rating", leaderboardHandler.UpdateRating)
 
-		// <--- 3. NEW: Register Simulation Routes
+		// Simulation Routes
 		api.GET("/simulation/status", simHandler.GetStatus)
 		api.POST("/simulation/toggle", simHandler.Toggle)
 	}
@@ -88,7 +84,6 @@ func main() {
 	// Start server
 	log.Printf("🚀 Server running on http://localhost:%s", cfg.Port)
 	log.Printf("📊 Leaderboard API: http://localhost:%s/api/leaderboard", cfg.Port)
-	log.Printf("🔍 Search API: http://localhost:%s/api/search?username=swift", cfg.Port)
 
 	if err := r.Run(":" + cfg.Port); err != nil {
 		log.Fatal("Failed to start server:", err)
