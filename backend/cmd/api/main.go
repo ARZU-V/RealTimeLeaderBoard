@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/gin-contrib/cors"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,6 +18,7 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	
 	// Connect to databases
 	pg, err := database.NewPostgresDB(cfg.DatabaseURL)
 	if err != nil {
@@ -37,14 +37,21 @@ func main() {
 
 	// Initialize handlers
 	leaderboardHandler := handlers.NewLeaderboardHandler(leaderboardService)
+	simHandler := handlers.NewSimulationHandler() // <--- 1. NEW: Init Sim Handler
 
 	// Setup Gin
 	if cfg.Port == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
+
+	// 2. START BACKGROUND WORKER (Always run this so the toggle button works!)
+	simulation.Start(pg.DB, leaderboardService)
+
+	// Optional: Auto-start if ENV is set
 	if os.Getenv("ENABLE_SIMULATION") == "true" {
-		simulation.Start(pg.DB, leaderboardService)
+		simulation.SetState(true)
 	}
+
 	r := gin.Default()
 
 	// CORS middleware
@@ -72,6 +79,10 @@ func main() {
 		api.GET("/search", leaderboardHandler.SearchUsers)
 		api.GET("/users/:username/rank", leaderboardHandler.GetUserRank)
 		api.POST("/users/:username/rating", leaderboardHandler.UpdateRating)
+
+		// <--- 3. NEW: Register Simulation Routes
+		api.GET("/simulation/status", simHandler.GetStatus)
+		api.POST("/simulation/toggle", simHandler.Toggle)
 	}
 
 	// Start server

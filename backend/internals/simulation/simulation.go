@@ -3,93 +3,141 @@ package simulation
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log"
 	"math/rand"
+	"sync"
 	"time"
 
 	"matiks-leaderboard/internals/services"
 )
 
+// Global state for the simulation
+var (
+	isActive bool = false
+	simMutex sync.Mutex
+)
+
+// GetState returns the current simulation status safely
+func GetState() bool {
+	simMutex.Lock()
+	defer simMutex.Unlock()
+	return isActive
+}
+
+// SetState updates the simulation status safely
+func SetState(active bool) {
+	simMutex.Lock()
+	defer simMutex.Unlock()
+	isActive = active
+
+	status := "STOPPED"
+	if active {
+		status = "ACTIVE"
+	}
+	log.Printf("🔄 Simulation State Changed: %s", status)
+}
+
 func Start(db *sql.DB, service *services.LeaderboardService) {
 	log.Println("=================================================")
-	log.Println("🤖 TOP 100 SIMULATION ACTIVE")
-	log.Println("   - Targeting ONLY Ranks 1-100")
-	log.Println("   - Updates every 200ms")
+	log.Println("🤖 TIERED BATCH SIMULATION STARTED")
 	log.Println("=================================================")
 
 	go func() {
-		ticker := time.NewTicker(200 * time.Millisecond) // 5 updates/sec
+		// Slower ticker: Update every 500ms (Safe for localhost)
+		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 
+		cycle := 0
+
 		for range ticker.C {
-			performTopRankUpdate(db, service)
+			if GetState() {
+				// REMOVED 'go' KEYWORD BELOW
+				// This forces the code to WAIT for the update to finish
+				// before starting the next one. prevents crashes.
+				if cycle%2 == 0 {
+					performBatchUpdate(db, service, 100, 1, 500)
+				} else {
+					performBatchUpdate(db, service, 50, 501, 1000)
+				}
+				cycle++
+			}
 		}
 	}()
 }
 
-func performTopRankUpdate(db *sql.DB, service *services.LeaderboardService) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+// performBatchUpdate updates 'batchSize' random users within the given rank range (offset/limit)
+// We use LIMIT/OFFSET in SQL to approximate the tiers.
+func performBatchUpdate(db *sql.DB, service *services.LeaderboardService, volatility int, minRank, maxRank int) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	var username string
-	var currentRating int
+	limit := maxRank - minRank + 1
+	offset := minRank - 1
+	batchSize := 10 // How many users to update at once
 
-	// 1. SELECT ONE RANDOM USER FROM THE TOP 100 ONLY
-	// We use a subquery to get the top 100, then shuffle them to pick one.
-	query := `
+	// 1. Select a BATCH of random users from this specific tier
+	// We get the top X users, then randomize order, then pick the batch size.
+	query := fmt.Sprintf(`
 		SELECT username, rating 
 		FROM (
 			SELECT username, rating 
 			FROM users 
 			ORDER BY rating DESC 
-			LIMIT 100
-		) top_users 
+			LIMIT %d OFFSET %d
+		) tier_users 
 		ORDER BY RANDOM() 
-		LIMIT 1
-	`
+		LIMIT %d
+	`, limit, offset, batchSize)
 
-	err := db.QueryRowContext(ctx, query).Scan(&username, &currentRating)
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
-		log.Printf("⚠️ Sim Error: Could not fetch top user: %v", err)
+		log.Printf("⚠️ Sim Error: Could not fetch batch: %v", err)
 		return
 	}
+	defer rows.Close()
 
-	// 2. CALCULATE CHANGE
-	// Since these are top players, we want volatile movement.
-	// We give a higher chance of losing points to allow lower ranks to climb up.
-	var change int
+	// 2. Process updates concurrently
+	var wg sync.WaitGroup
 
-	// 60% chance to lose points (Gravity effect for top players)
-	if rand.Intn(100) < 60 {
-		change = -rand.Intn(50) - 10 // Drop between 10 and 60 points
-	} else {
-		change = rand.Intn(40) + 5 // Gain between 5 and 45 points
+	for rows.Next() {
+		var username string
+		var currentRating int
+		if err := rows.Scan(&username, &currentRating); err != nil {
+			continue
+		}
+
+		wg.Add(1)
+		go func(u string, r int) {
+			defer wg.Done()
+
+			// Calculate Change based on volatility
+			// Higher tiers (Elite) have higher volatility (bigger swings)
+			change := 0
+			if rand.Intn(100) < 50 {
+				change = rand.Intn(volatility) + 5 // Gain
+			} else {
+				change = -rand.Intn(volatility) - 5 // Loss
+			}
+
+			newRating := r + change
+
+			// Clamp Limits
+			if newRating < 100 {
+				newRating = 100
+			}
+			if newRating > 5000 {
+				newRating = 5000
+			}
+
+			// Update Service
+			if err := service.UpdateRating(ctx, u, newRating); err == nil {
+				// Log simplified output
+				// log.Printf("⚡ %s: %d -> %d (%d)", u, r, newRating, change)
+			}
+		}(username, currentRating)
 	}
 
-	newRating := currentRating + change
-
-	// 3. CLAMP LIMITS
-	if newRating < 100 {
-		newRating = 100
-	}
-	if newRating > 5000 {
-		newRating = 5000
-	}
-
-	// 4. UPDATE
-	err = service.UpdateRating(ctx, username, newRating)
-	if err != nil {
-		log.Printf("❌ Failed: %v", err)
-		return
-	}
-
-	// 5. LOGGING
-	indicator := "➖"
-	if change > 0 {
-		indicator = "🟢 UP  "
-	} else {
-		indicator = "🔻 DOWN"
-	}
-
-	log.Printf("%s | %-15s | %4d -> %4d | Diff: %d", indicator, username, currentRating, newRating, change)
+	wg.Wait()
+	// log.Printf("✅ Updated batch in Tier %d-%d", minRank, maxRank)
 }

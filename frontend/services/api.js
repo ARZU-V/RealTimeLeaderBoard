@@ -52,3 +52,14 @@ export const updateRating = async (username, rating) => {
     throw error;
   }
 };
+export const toggleSimulation = async (isActive) => {
+  const response = await axios.post(`${API_URL}/simulation/toggle`, {
+    active: isActive
+  });
+  return response.data;
+};
+
+export const getSimulationStatus = async () => {
+  const response = await axios.get(`${API_URL}/simulation/status`);
+  return response.data;
+};

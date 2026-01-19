@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   TextInput,
@@ -8,35 +8,90 @@ import {
   ActivityIndicator,
   TouchableOpacity,
 } from 'react-native';
-import { searchUsers } from '../services/api';
+import axios from 'axios'; 
+
+// ADJUST THIS URL if testing on real device (e.g. use your IP 'http://192.168.1.5:8080/api')
+const API_URL = 'http://localhost:8080/api'; 
+
 import LeaderboardItem from '../components/LeaderboardItem';
+
 
 const SearchScreen = () => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [searched, setSearched] = useState(false);
+  
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
 
-  const handleSearch = async (text) => {
-    setQuery(text);
+  // Refs for Debouncing and State Management
+  const queryRef = useRef('');
+  const typingTimeoutRef = useRef(null);
+
+  // --- 1. SEARCH API CALL ---
+  const fetchSearchResults = async (text, pageNum, shouldAppend = false) => {
+    // Prevent searching for empty strings
+    if (text.length < 1) return;
     
-    if (text.length < 2) {
-      setResults([]);
-      setSearched(false);
-      return;
-    }
-
     try {
-      setLoading(true);
-      const response = await searchUsers(text);
-      setResults(response.results || []);
-      setSearched(true);
+      // Only show big spinner on initial search, not on "load more"
+      if (!shouldAppend) setLoading(true);
+
+      console.log(`Searching for "${text}" - Page ${pageNum}`);
+
+      const response = await axios.get(`${API_URL}/search?username=${text}&page=${pageNum}`);
+      const newResults = response.data.results || [];
+
+      if (shouldAppend) {
+        // APPEND new users to the existing list (Infinite Scroll)
+        setResults(prev => [...prev, ...newResults]);
+      } else {
+        // REPLACE list (New Search)
+        setResults(newResults);
+      }
+
+      // If we received fewer than 50 items, we have reached the end of the list
+      setHasMore(newResults.length === 50);
+
     } catch (error) {
       console.error('Search failed:', error);
-      setResults([]);
     } finally {
       setLoading(false);
     }
+  };
+
+  // --- 2. HANDLE TEXT INPUT (DEBOUNCED) ---
+  const handleTextChange = (text) => {
+    setQuery(text);
+    queryRef.current = text;
+    setPage(1); // Reset to Page 1 for new search
+    setHasMore(true);
+
+    // Clear previous timer to prevent spamming API
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+    if (text.length < 1) {
+      setResults([]);
+      return;
+    }
+
+    // Wait 300ms after user stops typing before calling API
+    typingTimeoutRef.current = setTimeout(() => {
+      fetchSearchResults(text, 1, false);
+    }, 300);
+  };
+
+  // --- 3. HANDLE INFINITE SCROLL ---
+  const handleLoadMore = () => {
+    // Don't load if already loading or no more data
+    if (!hasMore || loading) return;
+    
+    const nextPage = page + 1;
+    setPage(nextPage);
+    
+    // Call API for Next Page and Append Data
+    fetchSearchResults(queryRef.current, nextPage, true);
   };
 
   const renderItem = ({ item }) => (
@@ -44,60 +99,34 @@ const SearchScreen = () => {
       rank={item.global_rank}
       username={item.username}
       rating={item.rating}
+      // Highlight exact match
       isHighlighted={item.username.toLowerCase() === query.toLowerCase()}
     />
   );
-
-  const renderEmptyState = () => {
-    if (!searched) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🔍</Text>
-          <Text style={styles.emptyTitle}>Search for Players</Text>
-          <Text style={styles.emptySubtitle}>
-            Enter a username to find their global rank
-          </Text>
-        </View>
-      );
-    }
-
-    if (results.length === 0) {
-      return (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>😔</Text>
-          <Text style={styles.emptyTitle}>No Results Found</Text>
-          <Text style={styles.emptySubtitle}>
-            No players found matching "{query}"
-          </Text>
-        </View>
-      );
-    }
-
-    return null;
-  };
 
   return (
     <View style={styles.container}>
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search username..."
+          placeholder="Search Like Mathy.. Or GeoGuru"
           value={query}
-          onChangeText={handleSearch}
+          onChangeText={handleTextChange}
           autoCapitalize="none"
           autoCorrect={false}
         />
         {query.length > 0 && (
           <TouchableOpacity
             style={styles.clearButton}
-            onPress={() => handleSearch('')}
+            onPress={() => handleTextChange('')}
           >
             <Text style={styles.clearButtonText}>✕</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {loading ? (
+      {/* Show Full Screen Loader ONLY for first page */}
+      {loading && page === 1 ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3B82F6" />
         </View>
@@ -105,95 +134,57 @@ const SearchScreen = () => {
         <FlatList
           data={results}
           renderItem={renderItem}
-          keyExtractor={(item) => item.username}
-          ListEmptyComponent={renderEmptyState}
-          contentContainerStyle={results.length === 0 ? styles.emptyList : null}
+          // Use index to ensure uniqueness if ranks shift during scroll
+          keyExtractor={(item, index) => item.username + index} 
+          
+          // --- INFINITE SCROLL TRIGGERS ---
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5} // Load more when halfway down the current list
+          
+          // Show small spinner at the bottom when loading more
+          ListFooterComponent={ 
+            hasMore && results.length > 0 ? (
+              <ActivityIndicator color="#3B82F6" style={{margin: 20}}/> 
+            ) : null 
+          }
+          
+          ListEmptyComponent={
+            !loading && query.length > 0 && results.length === 0 ? (
+               <Text style={styles.emptyText}>No users found.</Text>
+            ) : null
+          }
         />
-      )}
-
-      {results.length > 0 && (
-        <View style={styles.resultsFooter}>
-          <Text style={styles.resultsCount}>
-            Found {results.length} player{results.length !== 1 ? 's' : ''}
-          </Text>
-        </View>
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
+  searchContainer: { 
+    flexDirection: 'row', 
+    padding: 16, 
+    backgroundColor: '#fff', 
+    paddingTop: 60, 
+    borderBottomWidth: 1, 
+    borderColor: '#E5E7EB' 
   },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+  searchInput: { 
+    flex: 1, 
+    height: 48, 
+    backgroundColor: '#F3F4F6', 
+    borderRadius: 12, 
+    paddingHorizontal: 16, 
+    fontSize: 16 
   },
-  searchInput: {
-    flex: 1,
-    height: 48,
-    backgroundColor: '#F3F4F6',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
+  clearButton: { 
+    marginLeft: 8, 
+    justifyContent: 'center', 
+    width: 32   
   },
-  clearButton: {
-    marginLeft: 8,
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  clearButtonText: {
-    fontSize: 20,
-    color: '#6B7280',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyList: {
-    flex: 1,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1F2937',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  resultsFooter: {
-    padding: 12,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    alignItems: 'center',
-  },
-  resultsCount: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
+  clearButtonText: { fontSize: 20, color: '#6B7280' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  emptyText: { textAlign: 'center', marginTop: 50, color: '#6B7280', fontSize: 16 }
 });
 
 export default SearchScreen;

@@ -1,15 +1,15 @@
 package services
-import(
-	"fmt"
-	"database/sql"
+
+import (
 	"context"
+	"database/sql"
+	"fmt"
 	"sync"
 
-	"github.com/redis/go-redis/v9"
 	"matiks-leaderboard/internals/models"
 
+	"github.com/redis/go-redis/v9"
 )
-
 
 type LeaderboardService struct {
 	db    *sql.DB
@@ -25,66 +25,91 @@ func NewLeaderboardService(db *sql.DB, rdb *redis.Client) *LeaderboardService {
 	}
 }
 
-func (s *LeaderboardService) GetLeaderboard(ctx context.Context, page, limit int) ([]models.LeaderboardEntry, int64, error) {
-	start := (page - 1) * limit
-	end := start + limit - 1
-
-	// Get total count
+// GetLeaderboard - OPTIMIZED: Fetches raw data range from Redis
+// Does NOT calculate rank here to allow batch processing in Handler.
+func (s *LeaderboardService) GetLeaderboard(ctx context.Context, start, stop int) ([]models.LeaderboardEntry, int64, error) {
+	// 1. Get total count
 	total := s.redis.ZCard(ctx, "leaderboard").Val()
 
-	// Get users from Redis (sorted by rating DESC)
-	results, err := s.redis.ZRevRangeWithScores(ctx, "leaderboard", int64(start), int64(end)).Result()
+	// 2. Get users from Redis (sorted by rating DESC)
+	results, err := s.redis.ZRevRangeWithScores(ctx, "leaderboard", int64(start), int64(stop)).Result()
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get leaderboard: %w", err)
 	}
 
-	entries := make([]models.LeaderboardEntry, 0, len(results))
-	
-	for _, z := range results {
-		rank := s.calculateRank(ctx, z.Member.(string), int(z.Score))
-		entries = append(entries, models.LeaderboardEntry{
-			Rank:     rank,
+	entries := make([]models.LeaderboardEntry, len(results))
+
+	for i, z := range results {
+		entries[i] = models.LeaderboardEntry{
 			Username: z.Member.(string),
 			Rating:   int(z.Score),
-		})
+			Rank:     0, // Placeholder, calculated in Handler
+		}
 	}
 
 	return entries, total, nil
 }
 
-// SearchUsers searches for users by username prefix
-func (s *LeaderboardService) SearchUsers(ctx context.Context, query string) ([]models.SearchResult, error) {
-	// Search in PostgreSQL for username matches
+// SearchUsers - UPDATED: Supports Limit/Offset for Pagination
+func (s *LeaderboardService) SearchUsers(ctx context.Context, query string, limit, offset int) ([]models.SearchResult, error) {
+	// 1. Search PostgreSQL (Fast now due to Index)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT username, rating 
-		FROM users 
-		WHERE username ILIKE $1 
-		LIMIT 20
-	`, query+"%")
-	
+        SELECT username, rating 
+        FROM users 
+        WHERE username ILIKE $1 
+        ORDER BY username ASC
+        LIMIT $2 OFFSET $3
+    `, query+"%", limit, offset)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to search users: %w", err)
 	}
 	defer rows.Close()
 
-	results := make([]models.SearchResult, 0)
-	
-	for rows.Next() {
-		var username string
-		var rating int
-		
-		if err := rows.Scan(&username, &rating); err != nil {
-			continue
-		}
+	// 2. Collect all users first (Don't calculate rank yet)
+	type tempUser struct {
+		Username string
+		Rating   int
+	}
+	var users []tempUser
 
-		// Get rank from Redis
-		rank := s.calculateRank(ctx, username, rating)
-		
-		results = append(results, models.SearchResult{
-			GlobalRank: rank,
-			Username:   username,
-			Rating:     rating,
-		})
+	for rows.Next() {
+		var u tempUser
+		if err := rows.Scan(&u.Username, &u.Rating); err == nil {
+			users = append(users, u)
+		}
+	}
+
+	if len(users) == 0 {
+		return []models.SearchResult{}, nil
+	}
+
+	// 3. PIPELINE: Queue up all Rank calculations
+	// This sends ONE request to Redis containing 50 commands
+	pipe := s.redis.Pipeline()
+	rankCmds := make([]*redis.IntCmd, len(users))
+
+	for i, u := range users {
+		// "How many people have a score > this user's rating?"
+		rankCmds[i] = pipe.ZCount(ctx, "leaderboard", fmt.Sprintf("(%d", u.Rating), "+inf")
+	}
+
+	// 4. EXECUTE: Fire the batch
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, fmt.Errorf("failed to execute pipeline: %w", err)
+	}
+
+	// 5. MAP results back
+	results := make([]models.SearchResult, len(users))
+	for i, u := range users {
+		// Rank = (Count of people better than me) + 1
+		rank := rankCmds[i].Val() + 1
+
+		results[i] = models.SearchResult{
+			GlobalRank: int(rank),
+			Username:   u.Username,
+			Rating:     u.Rating,
+		}
 	}
 
 	return results, nil
@@ -107,25 +132,25 @@ func (s *LeaderboardService) GetUserRank(ctx context.Context, username string) (
 	}, nil
 }
 
-// UpdateRating updates a user's rating
+// UpdateRating updates a user's rating in both Postgres and Redis
 func (s *LeaderboardService) UpdateRating(ctx context.Context, username string, newRating int) error {
 	// Validate rating
 	if newRating < 100 || newRating > 5000 {
 		return fmt.Errorf("rating must be between 100 and 5000")
 	}
 
-	// Update PostgreSQL
+	// Update PostgreSQL (Source of Truth)
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE users 
 		SET rating = $1, updated_at = NOW() 
 		WHERE username = $2
 	`, newRating, username)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to update postgres: %w", err)
 	}
 
-	// Update Redis
+	// Update Redis (Live Cache)
 	if err := s.redis.ZAdd(ctx, "leaderboard", redis.Z{
 		Score:  float64(newRating),
 		Member: username,
@@ -138,12 +163,10 @@ func (s *LeaderboardService) UpdateRating(ctx context.Context, username string, 
 
 // calculateRank calculates the correct rank handling ties
 func (s *LeaderboardService) calculateRank(ctx context.Context, username string, rating int) int {
-	// // Get reverse rank (0-indexed position)
-	// revRank := s.redis.ZRevRank(ctx, "leaderboard", username).Val()
-	
 	// Count users with higher rating
+	// ZCOUNT key (rating +inf
 	count := s.redis.ZCount(ctx, "leaderboard", fmt.Sprintf("(%d", rating), "+inf").Val()
-	
+
 	// Rank is count + 1 (1-indexed)
 	return int(count) + 1
 }
