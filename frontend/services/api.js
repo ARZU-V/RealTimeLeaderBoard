@@ -11,7 +11,7 @@ const api = axios.create({
   },
 });
 
-export const getLeaderboard = async (page = 1, limit = 50) => {
+export const getLeaderboard = async (page = 1, limit = 100) => {
   try {
     const response = await api.get('/leaderboard', {
       params: { page, limit },
@@ -23,13 +23,12 @@ export const getLeaderboard = async (page = 1, limit = 50) => {
   }
 };
 
-// UPDATED: Now accepts 'page' for infinite scrolling
 export const searchUsers = async (username, page = 1) => {
   try {
     const response = await api.get('/search', {
       params: { 
         username,
-        page // Pass the page number to backend
+        page 
       },
     });
     return response.data;

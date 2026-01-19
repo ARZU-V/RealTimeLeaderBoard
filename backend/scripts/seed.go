@@ -35,7 +35,7 @@ func main() {
 	// Clear existing data
 	log.Println(" Clearing existing data...")
 	if err := clearData(pg.DB, rdb.Client); err != nil {
-		log.Fatal(err)
+		log.Fatal(err)	
 	}
 
 	// Seed users

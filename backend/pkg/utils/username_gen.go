@@ -5,16 +5,16 @@ import (
 	"time"
 )
 
-var adjectives = []string{"Mathy", "NumberNinja", "CalcMaster", "Algebrator", "GeoGuru", "StatSage", "ProbPro", "MatrixMaestro", "FunctionFanatic", "DerivDynamo", "IntegralIcon", "TheoremTitan", "PiPioneer", "VectorVirtuoso", "LimitLegend", "SequenceSultan", "GraphGenius", "RatioRuler", "AngleAce", "SumSultan"}
-var nouns = []string{"Solver", "Whiz", "Wiz", "Brain", "Genius", "Prodigy", "Ace", "Champion", "Hero", "Wizard", "Savant", "Maven", "Expert", "Conqueror", "Mastermind", "Virtuoso", "Maestro", "Strategist", "Tactician", "Thinker", "Pioneer", "Innovator", "Visionary", "Trailblazer", "Pathfinder", "Explorer"}
+var first = []string{"Mathy", "NumberNinja", "CalcMaster", "Algebrator", "GeoGuru", "StatSage", "ProbPro", "MatrixMaestro", "FunctionFanatic", "DerivDynamo", "IntegralIcon", "TheoremTitan", "PiPioneer", "VectorVirtuoso", "LimitLegend", "SequenceSultan", "GraphGenius", "RatioRuler", "AngleAce", "SumSultan"}
+var second = []string{"Solver", "Whiz", "Wiz", "Brain", "Genius", "Prodigy", "Ace", "Champion", "Hero", "Wizard", "Savant", "Maven", "Expert", "Conqueror", "Mastermind", "Virtuoso", "Maestro", "Strategist", "Tactician", "Thinker", "Pioneer", "Innovator", "Visionary", "Trailblazer", "Pathfinder", "Explorer"}
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
 func GenerateUsername(index int) string {
-	adj := adjectives[rand.Intn(len(adjectives))]
-	noun := nouns[rand.Intn(len(nouns))]
+	adj := first[rand.Intn(len(first))]
+	noun := second[rand.Intn(len(second))]
 	return fmt.Sprintf("%s_%s_%d", adj, noun, index)
 }
 
