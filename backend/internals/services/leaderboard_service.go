@@ -162,12 +162,10 @@ func (s *LeaderboardService) UpdateRating(ctx context.Context, username string, 
 	return nil
 }
 
-// calculateRank calculates the correct rank handling ties
+
 func (s *LeaderboardService) calculateRank(ctx context.Context, username string, rating int) int {
-	// Count users with higher rating
-	// ZCOUNT key (rating +inf
+
 	count := s.redis.ZCount(ctx, "leaderboard", fmt.Sprintf("(%d", rating), "+inf").Val()
 
-	// Rank is count + 1 (1-indexed)
 	return int(count) + 1
 }

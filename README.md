@@ -1,5 +1,5 @@
 # 🚀 Real-Time High-Concurrency Leaderboard
-Checkout The Hosted Site:
+Checkout The Hosted Site
 https://real-time-leader-board-git-main-arjit-vermas-projects.vercel.app/
 
 A high-performance leaderboard system built to handle millions of users and thousands of concurrent score updates. This project demonstrates a **Hybrid Architecture** using **Go** for the backend engine, **Redis** for real-time ranking, and **PostgreSQL** for persistent storage.

@@ -39,9 +39,6 @@ func SetState(active bool) {
 }
 
 func Start(db *sql.DB, service *services.LeaderboardService) {
-	log.Println("=================================================")
-	log.Println("🤖 TIERED BATCH SIMULATION STARTED")
-	log.Println("=================================================")
 
 	go func() {
 		// Slower ticker: Update every 500ms (Safe for localhost)
@@ -52,9 +49,6 @@ func Start(db *sql.DB, service *services.LeaderboardService) {
 
 		for range ticker.C {
 			if GetState() {
-				// REMOVED 'go' KEYWORD BELOW
-				// This forces the code to WAIT for the update to finish
-				// before starting the next one. prevents crashes.
 				if cycle%2 == 0 {
 					performBatchUpdate(db, service, 100, 1, 500)
 				} else {
