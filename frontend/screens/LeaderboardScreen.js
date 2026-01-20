@@ -189,7 +189,7 @@ const LeaderboardScreen = () => {
       >
         <Ionicons name={simActive ? "stop-circle" : "play-circle"} size={20} color="white" />
         <Text style={styles.simBtnText}>
-          {simActive ? "Stop Simulation" : "Start Live Simulation"}
+          {simActive ? "Stop Simulation(Toggle Simulation To save the Writes and Read on Free Tier Redis)" : "Start Live Simulation(Toggle Simulation To save the Writes and Read on Free Tier Redis)"}
         </Text>
       </TouchableOpacity>
     </View>
