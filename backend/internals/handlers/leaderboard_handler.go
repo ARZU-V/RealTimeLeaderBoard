@@ -17,13 +17,7 @@ func NewLeaderboardHandler(service *services.LeaderboardService) *LeaderboardHan
 	return &LeaderboardHandler{service: service}
 }
 
-// GetLeaderboard - OPTIMIZED: Calculates ranks in memory to avoid N+1 Redis calls
-// @Summary Get leaderboard
-// @Tags leaderboard
-// @Param page query int false "Page number" default(1)
-// @Param limit query int false "Items per page" default(100)
-// @Success 200 {object} map[string]interface{}
-// @Router /api/leaderboard [get]
+// GetLeaderboard 
 func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 	// 1. Parse Pagination
 	pageStr := c.DefaultQuery("page", "1")
@@ -41,9 +35,9 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 	}
 	if limit > 500 {
 		limit = 500
-	} // Cap limit for safety
+	} 
 
-	// 2. Calculate Redis Range (ZREVRANGE is 0-indexed)
+	// 2. Calculate Redis Range
 	start := int64((page - 1) * limit)
 	stop := start + int64(limit) - 1
 
@@ -96,12 +90,7 @@ func (h *LeaderboardHandler) GetLeaderboard(c *gin.Context) {
 }
 
 // SearchUsers - OPTIMIZED: Supports Pagination
-// @Summary Search users by username
-// @Tags search
-// @Param username query string true "Username to search"
-// @Param page query int false "Page number" default(1)
-// @Success 200 {object} map[string]interface{}
-// @Router /api/search [get]
+
 func (h *LeaderboardHandler) SearchUsers(c *gin.Context) {
 	username := c.Query("username")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -131,11 +120,7 @@ func (h *LeaderboardHandler) SearchUsers(c *gin.Context) {
 }
 
 // GetUserRank godoc
-// @Summary Get user rank
-// @Tags users
-// @Param username path string true "Username"
-// @Success 200 {object} services.SearchResult
-// @Router /api/users/{username}/rank [get]
+
 func (h *LeaderboardHandler) GetUserRank(c *gin.Context) {
 	username := c.Param("username")
 
@@ -149,12 +134,6 @@ func (h *LeaderboardHandler) GetUserRank(c *gin.Context) {
 }
 
 // UpdateRating godoc
-// @Summary Update user rating
-// @Tags users
-// @Param username path string true "Username"
-// @Param body body map[string]int true "Rating"
-// @Success 200 {object} map[string]interface{}
-// @Router /api/users/{username}/rating [post]
 func (h *LeaderboardHandler) UpdateRating(c *gin.Context) {
 	username := c.Param("username")
 

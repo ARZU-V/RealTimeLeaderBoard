@@ -50,23 +50,24 @@ func (s *LeaderboardService) GetLeaderboard(ctx context.Context, start, stop int
 	return entries, total, nil
 }
 
-// SearchUsers - UPDATED: Supports Limit/Offset for Pagination
+// SearchUsers - UPDATED: Sorts by Rating DESC to satisfy Matiks requirement
 func (s *LeaderboardService) SearchUsers(ctx context.Context, query string, limit, offset int) ([]models.SearchResult, error) {
-	// 1. Search PostgreSQL (Fast now due to Index)
+	// 1. Search PostgreSQL
+	// CHANGE: We ORDER BY rating DESC so that higher scores (Rank 1) appear first
 	rows, err := s.db.QueryContext(ctx, `
-        SELECT username, rating 
-        FROM users 
-        WHERE username ILIKE $1 
-        ORDER BY username ASC
-        LIMIT $2 OFFSET $3
-    `, query+"%", limit, offset)
+		SELECT username, rating 
+		FROM users 
+		WHERE username ILIKE $1 
+		ORDER BY rating DESC, username ASC
+		LIMIT $2 OFFSET $3
+	`, query+"%", limit, offset)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to search users: %w", err)
 	}
 	defer rows.Close()
 
-	// 2. Collect all users first (Don't calculate rank yet)
+	// 2. Collect all users first
 	type tempUser struct {
 		Username string
 		Rating   int
@@ -85,12 +86,11 @@ func (s *LeaderboardService) SearchUsers(ctx context.Context, query string, limi
 	}
 
 	// 3. PIPELINE: Queue up all Rank calculations
-	// This sends ONE request to Redis containing 50 commands
 	pipe := s.redis.Pipeline()
 	rankCmds := make([]*redis.IntCmd, len(users))
 
 	for i, u := range users {
-		// "How many people have a score > this user's rating?"
+		// Tie-Aware Logic: Count people strictly better than this rating
 		rankCmds[i] = pipe.ZCount(ctx, "leaderboard", fmt.Sprintf("(%d", u.Rating), "+inf")
 	}
 
@@ -102,7 +102,8 @@ func (s *LeaderboardService) SearchUsers(ctx context.Context, query string, limi
 	// 5. MAP results back
 	results := make([]models.SearchResult, len(users))
 	for i, u := range users {
-		// Rank = (Count of people better than me) + 1
+		// Rank = (Count of people with > rating) + 1
+		// This ensures two users with same rating get the same rank
 		rank := rankCmds[i].Val() + 1
 
 		results[i] = models.SearchResult{
