@@ -10,6 +10,7 @@ import (
 	"matiks-leaderboard/config"
 	"matiks-leaderboard/internals/database"
 	"matiks-leaderboard/pkg/utils"
+
 	"github.com/redis/go-redis/v9"
 )
 
@@ -35,7 +36,7 @@ func main() {
 	// Clear existing data
 	log.Println(" Clearing existing data...")
 	if err := clearData(pg.DB, rdb.Client); err != nil {
-		log.Fatal(err)	
+		log.Fatal(err)
 	}
 
 	// Seed users
@@ -66,7 +67,7 @@ func clearData(db *sql.DB, rdb *redis.Client) error {
 func seedUsers(db *sql.DB, rdb *redis.Client, count int) error {
 	ctx := context.Background()
 	batchSize := 1000
-	
+
 	// Prepare statement for PostgreSQL
 	stmt, err := db.Prepare("INSERT INTO users (username, rating) VALUES ($1, $2)")
 	if err != nil {
@@ -76,9 +77,9 @@ func seedUsers(db *sql.DB, rdb *redis.Client, count int) error {
 
 	// Redis pipeline for batch inserts
 	pipe := rdb.Pipeline()
-	
+
 	startTime := time.Now()
-	
+
 	for i := 0; i < count; i++ {
 		username := utils.GenerateUsername(i + 1)
 		rating := utils.GenerateRating()
@@ -110,7 +111,7 @@ func seedUsers(db *sql.DB, rdb *redis.Client, count int) error {
 	}
 
 	duration := time.Since(startTime)
-	log.Printf("⏱Seeded %d users in %v (%.0f users/sec)", count, duration, float64(count)/duration.Seconds())
+	log.Printf("Seeded %d users in %v (%.0f users/sec)", count, duration, float64(count)/duration.Seconds())
 
 	return nil
 }

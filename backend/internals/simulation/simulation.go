@@ -122,12 +122,11 @@ func performBatchUpdate(db *sql.DB, service *services.LeaderboardService, volati
 
 			// Update Service
 			if err := service.UpdateRating(ctx, u, newRating); err == nil {
-				// Log simplified output
-				// log.Printf("⚡ %s: %d -> %d (%d)", u, r, newRating, change)
+
 			}
 		}(username, currentRating)
 	}
 
 	wg.Wait()
-	// log.Printf("✅ Updated batch in Tier %d-%d", minRank, maxRank)
+
 }

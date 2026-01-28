@@ -133,7 +133,7 @@ const SearchScreen = () => {
           // Use index to ensure uniqueness if ranks shift during scroll
           keyExtractor={(item, index) => item.username + index} 
           
-          // --- INFINITE SCROLL TRIGGERS ---
+          // INFINITE SCROLL TRIGGERS 
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5} // Load more when halfway down the current list
           
